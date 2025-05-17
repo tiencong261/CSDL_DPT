@@ -21,7 +21,9 @@ from tien_xu_ly import process_image
 try:
     print("Đang kết nối đến MongoDB...")
     client = MongoClient('mongodb+srv://congdinh2412:SX3U5c8VLUTHZQfV@cluster0.3i7aqal.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', 
-                        serverSelectionTimeoutMS=5000)  # 5 giây timeout
+                        serverSelectionTimeoutMS=5000,  # 5 giây timeout
+                        ssl=True,
+                        tlsAllowInvalidCertificates=True)
     # Kiểm tra kết nối
     client.server_info()
     print("Kết nối MongoDB thành công!")
