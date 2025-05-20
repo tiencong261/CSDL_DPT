@@ -67,19 +67,20 @@ def combine_features_from_mongodb():
         for image_name in all_images:
             features_dict[image_name] = {'filename': image_name}
         
-        # Thêm đặc trưng HOG (mean)
+        # Thêm đặc trưng HOG (mean và full vector)
         for doc in hog_features:
             if 'filename' not in doc:
                 continue
             
             image_name = doc['filename']
-            # Tính trung bình của tất cả các đặc trưng HOG
+            # Lấy tất cả các đặc trưng HOG
             feature_values = []
             for key, value in doc.items():
                 if key.startswith('feature_') and isinstance(value, (int, float)):
                     feature_values.append(value)
             
             if feature_values:
+                # Lưu giá trị trung bình
                 features_dict[image_name]['hog'] = float(sum(feature_values) / len(feature_values))
         
         # Thêm đặc trưng LBP (mean)

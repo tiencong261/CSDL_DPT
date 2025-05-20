@@ -19,12 +19,12 @@ def extract_hog_features(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
     # Trích xuất HOG features
-    features = hog(gray, 
+    feature = hog(gray, 
                   orientations=9,
                   pixels_per_cell=(8, 8),
                   cells_per_block=(8, 8),
                   block_norm='L2-Hys')
-    return features
+    return feature
 
 def reduce_hog_statistical(hog_vector, n_parts=10):
     hog_vector = np.array(hog_vector)
@@ -69,13 +69,13 @@ def process_images():
                 continue
                 
             # Trích xuất đặc trưng HOG
-            features = extract_hog_features(image)
-            reduced_features = reduce_hog_statistical(features, n_parts=10)
+            feature = extract_hog_features(image)
+            hog_feature = reduce_hog_statistical(feature, n_parts=10)
             
             # Tạo dictionary chứa tên file và các đặc trưng đã giảm chiều
             result = {'filename': filename}
-            for i, feature in enumerate(reduced_features):
-                result[f'reduced_mean_{i}'] = float(feature)
+            for i, feature in enumerate(hog_feature):
+                result[f'feature_{i}'] = float(feature)
             results.append(result)
             
         except Exception as e:
