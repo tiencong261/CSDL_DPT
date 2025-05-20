@@ -13,14 +13,15 @@ collection = db['hsv_features']
 def extract_hsv_features(image):
     """
     Trích xuất đặc trưng màu sắc sử dụng HSV
+    Sử dụng 36 bins cho H, 32 bins cho S và V
     """
     # Chuyển ảnh sang không gian màu HSV
     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     
     # Tính histogram cho từng kênh H, S, V
-    h_hist = cv2.calcHist([hsv_image], [0], None, [180], [0, 180])
-    s_hist = cv2.calcHist([hsv_image], [1], None, [256], [0, 256])
-    v_hist = cv2.calcHist([hsv_image], [2], None, [256], [0, 256])
+    h_hist = cv2.calcHist([hsv_image], [0], None, [36], [0, 180])  # 36 bins cho H
+    s_hist = cv2.calcHist([hsv_image], [1], None, [32], [0, 256])  # 32 bins cho S
+    v_hist = cv2.calcHist([hsv_image], [2], None, [32], [0, 256])  # 32 bins cho V
     
     # Chuẩn hóa histogram
     h_hist = cv2.normalize(h_hist, h_hist).flatten()

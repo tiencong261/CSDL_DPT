@@ -22,9 +22,15 @@ def extract_hog_features(image):
     features = hog(gray, 
                   orientations=9,
                   pixels_per_cell=(8, 8),
-                  cells_per_block=(2, 2),
+                  cells_per_block=(8, 8),
                   block_norm='L2-Hys')
     return features
+
+def reduce_hog_statistical(hog_vector, n_parts=10):
+    hog_vector = np.array(hog_vector)
+    splits = np.array_split(hog_vector, n_parts)
+    reduced = np.array([part.mean() for part in splits])
+    return reduced
 
 def process_images():
     # Đường dẫn đến thư mục chứa ảnh
@@ -64,12 +70,12 @@ def process_images():
                 
             # Trích xuất đặc trưng HOG
             features = extract_hog_features(image)
+            reduced_features = reduce_hog_statistical(features, n_parts=10)
             
-            # Tạo dictionary chứa tên file và các đặc trưng
+            # Tạo dictionary chứa tên file và các đặc trưng đã giảm chiều
             result = {'filename': filename}
-            for i, feature in enumerate(features):
-                result[f'feature_{i}'] = float(feature)
-                
+            for i, feature in enumerate(reduced_features):
+                result[f'reduced_mean_{i}'] = float(feature)
             results.append(result)
             
         except Exception as e:
