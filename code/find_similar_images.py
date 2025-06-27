@@ -1,12 +1,12 @@
 import cv2
 import numpy as np
 import os
-import pandas as pd
+#from pandas import pd  # Không sử dụng, xóa đi
+#from sklearn.metrics.pairwise import cosine_similarity  # Không sử dụng, xóa đi
 from pymongo import MongoClient
 import face_recognition
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from sklearn.metrics.pairwise import cosine_similarity
 import sys
 import time
 import argparse
@@ -16,6 +16,11 @@ import requests
 from deepface import DeepFace
 # Import từ file tien_xu_ly.py
 from tien_xu_ly import process_image
+from extract_face import calculate_eye_ratio, calculate_mouth_ratio, calculate_face_ratio, extract_face_features
+from extract_hog import extract_hog_features
+from extract_lbp import extract_lbp_features
+from extract_hsv import extract_hsv_features
+from extract_gender import extract_gender
 
 # Kết nối đến MongoDB với timeout
 try:
@@ -33,230 +38,6 @@ except Exception as e:
     print(f"Lỗi kết nối MongoDB: {str(e)}")
     print("Vui lòng kiểm tra kết nối mạng và thông tin đăng nhập MongoDB.")
     sys.exit(1)
-
-# Các hàm trích xuất đặc trưng giống như các file trước đó
-def calculate_eye_ratio(left_eye, right_eye):
-    """Tính tỷ lệ mắt"""
-    left_width = np.linalg.norm(np.array(left_eye[0]) - np.array(left_eye[3]))
-    right_width = np.linalg.norm(np.array(right_eye[0]) - np.array(right_eye[3]))
-    return (left_width + right_width) / 2
-
-def calculate_mouth_ratio(mouth):
-    """Tính tỷ lệ miệng"""
-    width = np.linalg.norm(np.array(mouth[0]) - np.array(mouth[6]))
-    height = np.linalg.norm(np.array(mouth[3]) - np.array(mouth[9]))
-    return width / height
-
-def calculate_face_ratio(chin):
-    """Tính tỷ lệ khuôn mặt"""
-    width = np.linalg.norm(np.array(chin[0]) - np.array(chin[16]))
-    height = np.linalg.norm(np.array(chin[8]) - np.array(chin[0]))
-    return width / height
-
-def extract_face_features(image):
-    """
-    Trích xuất đặc trưng dựa trên các điểm mốc trên khuôn mặt
-    """
-    # Sử dụng face_recognition để tìm các điểm mốc
-    face_locations = face_recognition.face_locations(image)
-    if len(face_locations) > 0:
-        landmarks = face_recognition.face_landmarks(image, face_locations)[0]
-        
-        # Tính toán các tỷ lệ khuôn mặt
-        features = {}
-        
-        # Tỷ lệ mắt
-        left_eye = landmarks['left_eye']
-        right_eye = landmarks['right_eye']
-        eye_ratio = calculate_eye_ratio(left_eye, right_eye)
-        features['eye_ratio'] = float(eye_ratio)
-        
-        # Tỷ lệ miệng
-        mouth = landmarks['top_lip'] + landmarks['bottom_lip']
-        mouth_ratio = calculate_mouth_ratio(mouth)
-        features['mouth_ratio'] = float(mouth_ratio)
-        
-        # Tỷ lệ khuôn mặt
-        chin = landmarks['chin']
-        face_ratio = calculate_face_ratio(chin)
-        features['face_ratio'] = float(face_ratio)
-        
-        # Tính trung bình của face features để tương thích với định dạng lưu trữ
-        face_values = [eye_ratio, mouth_ratio, face_ratio]
-        features['face'] = float(sum(face_values) / len(face_values))
-        
-        return features
-    return None
-
-def extract_hog_features(image):
-    """
-    Trích xuất đặc trưng HOG từ ảnh
-    """
-    # Chuyển đổi ảnh sang grayscale nếu cần
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
-    
-    # Resize ảnh để giảm thời gian xử lý
-    resized = cv2.resize(gray, (64, 128))
-    
-    # Tính toán đặc trưng HOG
-    win_size = (64, 128)
-    block_size = (16, 16)
-    block_stride = (8, 8)
-    cell_size = (8, 8)
-    nbins = 9
-    
-    hog = cv2.HOGDescriptor(win_size, block_size, block_stride, cell_size, nbins)
-    hog_features = hog.compute(resized)
-    
-    # Tính trung bình của các đặc trưng HOG
-    return float(np.mean(hog_features))
-
-def extract_lbp_features(image):
-    """
-    Trích xuất đặc trưng LBP từ ảnh
-    """
-    # Chuyển đổi ảnh sang grayscale nếu cần
-    if len(image.shape) == 3:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    else:
-        gray = image
-    
-    # Resize ảnh để giảm thời gian xử lý
-    resized = cv2.resize(gray, (64, 128))
-    
-    # Tham số cho LBP
-    radius = 1
-    n_points = 8 * radius
-    
-    # Tính toán LBP
-    lbp = np.zeros_like(resized)
-    for i in range(radius, resized.shape[0] - radius):
-        for j in range(radius, resized.shape[1] - radius):
-            center = resized[i, j]
-            binary = []
-            for k in range(n_points):
-                angle = 2 * np.pi * k / n_points
-                x = i + radius * np.cos(angle)
-                y = j - radius * np.sin(angle)
-                
-                # Làm tròn tọa độ
-                x = int(round(x))
-                y = int(round(y))
-                
-                # So sánh với giá trị trung tâm
-                if resized[x, y] >= center:
-                    binary.append(1)
-                else:
-                    binary.append(0)
-            
-            # Chuyển đổi binary thành giá trị thập phân
-            decimal = sum([binary[k] * (2 ** k) for k in range(len(binary))])
-            lbp[i, j] = decimal
-    
-    # Tính histogram của LBP
-    max_bins = 2 ** n_points
-    hist, _ = np.histogram(lbp, bins=max_bins, range=(0, max_bins))
-    
-    # Chuẩn hóa histogram
-    hist = hist.astype("float")
-    hist /= (hist.sum() + 1e-7)
-    
-    # Trả về giá trị trung bình của đặc trưng LBP
-    return float(np.mean(hist))
-
-def extract_hsv_features(image):
-    """
-    Trích xuất đặc trưng HSV từ ảnh
-    """
-    # Chuyển đổi sang không gian màu HSV
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    
-    # Tính histogram cho từng kênh
-    h_hist = cv2.calcHist([hsv], [0], None, [180], [0, 180])
-    s_hist = cv2.calcHist([hsv], [1], None, [256], [0, 256])
-    v_hist = cv2.calcHist([hsv], [2], None, [256], [0, 256])
-    
-    # Chuẩn hóa histogram
-    h_hist = cv2.normalize(h_hist, h_hist, 0, 1, cv2.NORM_MINMAX)
-    s_hist = cv2.normalize(s_hist, s_hist, 0, 1, cv2.NORM_MINMAX)
-    v_hist = cv2.normalize(v_hist, v_hist, 0, 1, cv2.NORM_MINMAX)
-    
-    # Kết hợp các đặc trưng
-    features = np.concatenate([h_hist, s_hist, v_hist]).flatten()
-    
-    # Trả về giá trị trung bình
-    return float(np.mean(features))
-
-def extract_gender_with_deepface(image):
-    """
-    Xác định giới tính sử dụng DeepFace (giống như extract_gender.py)
-    """
-    try:
-        # Kiểm tra xem đầu vào có phải là đường dẫn URL không
-        if isinstance(image, str) and image.startswith(('http://', 'https://')):
-            # Tải ảnh từ URL
-            temp_path = "temp_deepface.jpg"
-            response = requests.get(image, stream=True)
-            response.raise_for_status()
-            
-            with open(temp_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            # Phân tích khuôn mặt và giới tính bằng DeepFace với file tạm
-            result = DeepFace.analyze(
-                img_path=temp_path,
-                actions=['gender'],
-                enforce_detection=False,
-                detector_backend='opencv',
-                silent=True  # Tắt các thông báo không cần thiết
-            )
-            
-            # Xóa file tạm
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        else:
-            # Phân tích khuôn mặt và giới tính bằng DeepFace
-            result = DeepFace.analyze(
-                img_path=image,
-                actions=['gender'],
-                enforce_detection=False,
-                detector_backend='opencv',
-                silent=True  # Tắt các thông báo không cần thiết
-            )
-        
-        # Lấy kết quả giới tính
-        if isinstance(result, list):
-            result = result[0]
-        
-        # Chuyển đổi giới tính từ tiếng Anh sang số (Nam: 0, Nữ: 1)
-        gender_str = result['dominant_gender']
-        gender_val = 1 if gender_str == "Woman" else 0
-        gender_text = "Nữ" if gender_val == 1 else "Nam"
-        
-        print(f"Giới tính nhận dạng từ ảnh đầu vào (DeepFace): {gender_text}")
-        return gender_val
-    
-    except Exception as e:
-        print(f"Lỗi khi xác định giới tính bằng DeepFace: {str(e)}")
-        return None
-
-def predict_gender(image):
-    """
-    Dự đoán giới tính (giả đơn giản) dựa trên màu sắc
-    """
-    # Chuyển đổi sang không gian màu HSV
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    
-    # Giá trị trung bình của kênh Hue
-    h_mean = np.mean(hsv[:, :, 0])
-    
-    # Đây chỉ là giả định đơn giản, không chính xác trong thực tế
-    # Giả sử: Hue < 90 -> Nam (0), Hue >= 90 -> Nữ (1)
-    return 1 if h_mean >= 90 else 0
 
 def extract_all_features(image, predefined_gender=None):
     """
@@ -296,11 +77,11 @@ def extract_all_features(image, predefined_gender=None):
         print(f"Sử dụng giới tính đã biết: {gender_text}")
     else:
         # Ưu tiên sử dụng DeepFace để xác định giới tính
-        gender = extract_gender_with_deepface(image)
+        gender = extract_gender(image)
         
         # Nếu DeepFace không xác định được, sử dụng phương pháp dự đoán đơn giản
         if gender is None:
-            gender = predict_gender(image)
+            gender = extract_gender(image)
             gender_text = "Nữ" if gender == 1 else "Nam"
             print(f"Giới tính nhận dạng từ ảnh đầu vào (dự đoán đơn giản): {gender_text}")
         else:
@@ -322,23 +103,38 @@ def calculate_similarity(input_features, db_features):
     weight = {'face': 0.3, 'hog': 0.2, 'lbp': 0.2, 'hsv': 0.2, 'gender': 0.1}
     count = 0
     
+    # Dictionary để lưu độ tương đồng của từng thuộc tính
+    feature_similarities = {}
+    
     # Tính điểm tương đồng cho từng loại đặc trưng
     for feature_type in ['face', 'hog', 'lbp', 'hsv']:
         if feature_type in input_features and feature_type in db_features:
-            # Tính khoảng cách Euclidean ngược
-            dist = abs(input_features[feature_type] - db_features[feature_type])
+            # Đảm bảo giá trị là float, nếu là array thì lấy giá trị trung bình
+            input_val = input_features[feature_type]
+            db_val = db_features[feature_type]
+            try:
+                if isinstance(input_val, np.ndarray):
+                    input_val = float(np.mean(input_val))
+                if isinstance(db_val, np.ndarray):
+                    db_val = float(np.mean(db_val))
+            except Exception:
+                pass
+            dist = abs(input_val - db_val)
             max_dist = 1.0  # Giá trị tối đa giả định
             norm_sim = 1 - min(dist / max_dist, 1.0)  # Chuẩn hóa về 0-1
             similarity += weight[feature_type] * norm_sim
+            feature_similarities[feature_type] = norm_sim
             count += 1
     
     # Chuẩn hóa điểm tương đồng
     if count > 0:
-        # Không cần chuẩn hóa với gender vì đã lọc theo gender trước đó
         total_weight = sum([weight[key] for key in ['face', 'hog', 'lbp', 'hsv'] 
                           if key in input_features and key in db_features])
-        return similarity / total_weight
-    return 0
+        final_similarity = similarity / total_weight
+        
+        # Trả về cả độ tương đồng tổng hợp và từng thuộc tính
+        return final_similarity, feature_similarities
+    return 0, {}
 
 def load_image(image_path):
     """
@@ -514,11 +310,11 @@ def find_similar_images(input_image_path, num_results=3):
         else:
             # Nếu ảnh không có trong cơ sở dữ liệu, dùng DeepFace để xác định
             print("Ảnh không có trong cơ sở dữ liệu, sử dụng DeepFace để xác định giới tính...")
-            input_gender = extract_gender_with_deepface(preprocessed_image)
+            input_gender = extract_gender(preprocessed_image)
             
             # Nếu DeepFace không xác định được, sử dụng phương pháp dự đoán đơn giản
             if input_gender is None:
-                input_gender = predict_gender(preprocessed_image)
+                input_gender = extract_gender(preprocessed_image)
                 gender_text = "Nữ" if input_gender == 1 else "Nam"
                 print(f"Giới tính nhận dạng từ phương pháp dự đoán đơn giản: {gender_text}")
         
@@ -557,8 +353,8 @@ def find_similar_images(input_image_path, num_results=3):
                 
             # Tính độ tương đồng dựa trên các đặc trưng NGOẠI TRỪ giới tính
             # vì chúng ta đã lọc theo giới tính rồi
-            similarity = calculate_similarity(input_features, db_feature)
-            similarities.append((db_feature['filename'], similarity, db_feature.get('gender', None)))
+            similarity, feature_similarities = calculate_similarity(input_features, db_feature)
+            similarities.append((db_feature['filename'], similarity, db_feature.get('gender', None), feature_similarities))
         
         # Sắp xếp theo độ tương đồng giảm dần
         similarities.sort(key=lambda x: x[1], reverse=True)
@@ -566,12 +362,20 @@ def find_similar_images(input_image_path, num_results=3):
         # In thông tin chi tiết về các ảnh đã chọn
         print(f"\nĐã hoàn thành việc tính toán độ tương đồng cho {len(filtered_db_features)-1} ảnh")
         print(f"Top {num_results} ảnh tương đồng nhất (cùng giới tính {gender_text}):")
-        for i, (filename, similarity, gender) in enumerate(similarities[:num_results]):
+        print("-" * 80)
+        for i, (filename, similarity, gender, feature_similarities) in enumerate(similarities[:num_results]):
             gender_text = "Nữ" if gender == 1 else "Nam"
-            print(f"{i+1}. {filename} - Giới tính: {gender_text} - Độ tương đồng: {similarity:.4f}")
+            print(f"{i+1}. {filename}")
+            print(f"   Giới tính: {gender_text}")
+            print(f"   Độ tương đồng từng thuộc tính:")
+            print(f"     - Face similarity: {feature_similarities.get('face', 0):.4f}")
+            print(f"     - HOG similarity: {feature_similarities.get('hog', 0):.4f}")
+            print(f"     - LBP similarity: {feature_similarities.get('lbp', 0):.4f}")
+            print(f"     - HSV similarity: {feature_similarities.get('hsv', 0):.4f}")
+            print("-" * 40)
         
         # Chỉ lấy tên file và độ tương đồng cho hàm trả về
-        result = [(filename, similarity) for filename, similarity, _ in similarities[:num_results]]
+        result = [(filename, similarity) for filename, similarity, _, _ in similarities[:num_results]]
         return result
     
     except Exception as e:
@@ -749,11 +553,12 @@ def main():
     
     if similar_images:
         print("\nKẾT QUẢ TÌM KIẾM:")
-        print("-" * 50)
+        print("=" * 50)
         for i, (filename, similarity) in enumerate(similar_images):
             print(f"{i+1}. Tệp ảnh: {filename}")
             print(f"   Độ tương đồng: {similarity:.4f}")
-        print("-" * 50)
+            print("-" * 30)
+        print("=" * 50)
         
         # Hiển thị kết quả
         display_results(image_path, similar_images)
@@ -762,4 +567,4 @@ def main():
         print("Vui lòng thử lại với một ảnh khác hoặc kiểm tra lại cơ sở dữ liệu.")
 
 if __name__ == "__main__":
-    main() 
+    main()

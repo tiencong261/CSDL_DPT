@@ -33,30 +33,26 @@ def extract_face_features(image):
     """
     Trích xuất đặc trưng dựa trên các điểm mốc trên khuôn mặt
     """
-    # Sử dụng face_recognition để tìm các điểm mốc
     face_locations = face_recognition.face_locations(image)
     if len(face_locations) > 0:
         landmarks = face_recognition.face_landmarks(image, face_locations)[0]
         
-        # Tính toán các tỷ lệ khuôn mặt
-        features = []
-        
-        # Tỷ lệ mắt
         left_eye = landmarks['left_eye']
         right_eye = landmarks['right_eye']
         eye_ratio = calculate_eye_ratio(left_eye, right_eye)
-        features.append(eye_ratio)
         
-        # Tỷ lệ miệng
         mouth = landmarks['top_lip'] + landmarks['bottom_lip']
         mouth_ratio = calculate_mouth_ratio(mouth)
-        features.append(mouth_ratio)
         
-        # Tỷ lệ khuôn mặt
         chin = landmarks['chin']
         face_ratio = calculate_face_ratio(chin)
-        features.append(face_ratio)
         
+        features = {
+            "eye_ratio": float(eye_ratio),
+            "mouth_ratio": float(mouth_ratio),
+            "face_ratio": float(face_ratio),
+            "face": float((eye_ratio + mouth_ratio + face_ratio) / 3)
+        }
         return features
     return None
 
@@ -106,9 +102,10 @@ def process_images():
             # Tạo dictionary chứa tên file và các đặc trưng
             result = {
                 'filename': filename,
-                'eye_ratio': float(features[0]),
-                'mouth_ratio': float(features[1]),
-                'face_ratio': float(features[2])
+                'eye_ratio': float(features["eye_ratio"]),
+                'mouth_ratio': float(features["mouth_ratio"]),
+                'face_ratio': float(features["face_ratio"]),
+                'face': float(features["face"])
             }
                 
             # Thêm vào danh sách kết quả
